@@ -1,0 +1,24 @@
+{
+  "name": "umhackathon",
+  "version": "1.0.0",
+  "description": "The repository for only the Alpha Data team...",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/afiq-codes26/UMHackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/afiq-codes26/UMHackathon/issues"
+  },
+  "homepage": "https://github.com/afiq-codes26/UMHackathon#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
