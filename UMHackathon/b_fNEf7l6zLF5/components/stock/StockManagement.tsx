@@ -41,9 +41,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 export function StockManagement() {
   const [stockItems, setStockItems] = useState<StockItem[]>(initialStockItems)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null)
   const [adjustmentAmount, setAdjustmentAmount] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isChickenOrdered, setIsChickenOrdered] = useState(false);
 
   const filteredItems = stockItems.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,7 +124,7 @@ export function StockManagement() {
     predicted: item.predictedUsage,
     risk: item.riskLevel
   }))
-
+  
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -360,39 +362,90 @@ export function StockManagement() {
       </Card>
 
       {/* AI Recommendations */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <span className="text-2xl">🤖</span>
-            AI Stock Recommendations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-card border">
-              <p className="font-medium text-foreground">Urgent: Order Chicken Thigh Today</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Based on your predicted usage of 15kg/day and current stock of 12kg, you&apos;ll run out by tomorrow evening. 
-                Recommended order: 30kg from Fresh Farm Supplies (1-day lead time).
-              </p>
-            </div>
-            <div className="p-4 rounded-lg bg-card border">
-              <p className="font-medium text-foreground">Cooking Oil Running Low</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Current stock (8L) is below minimum threshold (10L). With Hari Raya coming (+50% expected demand), 
-                recommend ordering 20L from NSK Trading before Friday.
-              </p>
-            </div>
-            <div className="p-4 rounded-lg bg-card border">
-              <p className="font-medium text-foreground">Optimize Sambal Paste Orders</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Your sambal usage peaks on weekends. Consider ordering 5kg on Thursdays to ensure freshness 
-                and reduce spoilage risk.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+<Card className="border-primary/20 bg-primary/5 shadow-lg">
+  <CardHeader className="flex flex-row items-center justify-between">
+    <CardTitle className="flex items-center gap-2">
+      <span className="text-2xl animate-pulse">🤖</span>
+      Z.AI Smart Recommendations
+    </CardTitle>
+    <Button 
+      variant="outline" 
+      size="sm" 
+      onClick={() => {
+        setIsAnalyzing(true);
+        setTimeout(() => setIsAnalyzing(false), 1500); // Fake a 1.5s delay
+      }}
+      disabled={isAnalyzing}
+    >
+      {isAnalyzing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+      {isAnalyzing ? "Analyzing Patterns..." : "Re-scan with Z.AI"}
+    </Button>
+    <Button variant="ghost" size="sm" className="text-xs">
+      <RefreshCw className="mr-2 h-3 w-3" /> Re-scan Data
+    </Button>
+  </CardHeader>
+  <CardContent>
+    <div className="grid gap-4 md:grid-cols-3">
+      {/* Chicken Thigh Action Card */}
+      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all group">
+        <div className="flex justify-between items-start mb-2">
+           <Badge className="bg-danger/10 text-danger border-danger/20">Critical</Badge>
+           <TrendingUp className="h-4 w-4 text-danger" />
+        </div>
+        <p className="font-bold text-foreground">Order 30kg Chicken Thigh</p>
+        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+          AI detected a supply gap. You have <span className="text-danger font-bold">12kg</span> remaining, but predicted demand is <span className="font-bold">15kg/day</span>.
+        </p>
+        <Button 
+          variant="default" 
+          className="w-full mt-4 bg-primary hover:scale-105 transition-transform"
+         onClick={() => {
+         
+          setStockItems(prev => prev.map(item => 
+            item.name.includes("Chicken Thigh") 
+              ? { ...item, currentStock: item.currentStock + 30, riskLevel: 'low' } 
+              : item
+          ));
+          
+          setIsChickenOrdered(true);
+          alert("Order placed! Stock updated.");
+        }}
+        >
+          Approve Order
+        </Button>
+      </div>
+
+      {/* Cooking Oil Action Card */}
+      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all">
+        <div className="flex justify-between items-start mb-2">
+           <Badge className="bg-warning/10 text-warning border-warning/20">Hari Raya Prep</Badge>
+           <TrendingUp className="h-4 w-4 text-warning" />
+        </div>
+        <p className="font-bold text-foreground">Order 20L Cooking Oil</p>
+        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+          Z.AI predicted a <span className="text-warning font-bold">+50% surge</span> due to Hari Raya. Lead time is 3 days—order now to avoid peak prices.
+        </p>
+        <Button variant="outline" className="w-full mt-4 border-primary text-primary hover:bg-primary/10">
+          Review Vendor
+        </Button>
+      </div>
+
+      {/* Sambal Action Card */}
+      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all">
+        <div className="flex justify-between items-start mb-2">
+           <Badge className="bg-success/10 text-success border-success/20">Freshness Opt.</Badge>
+           <TrendingDown className="h-4 w-4 text-success" />
+        </div>
+        <p className="font-bold text-foreground">Order 5kg Sambal Paste</p>
+        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+          Weekend usage spike detected. Ordering on <span className="font-bold">Thursday</span> reduces waste by 12%.
+        </p>
+        <Button variant="secondary" className="w-full mt-4">Snooze</Button>
+      </div>
+    </div>
+  </CardContent>
+</Card>
     </div>
   )
 }
+  
