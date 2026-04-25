@@ -41,11 +41,9 @@ interface StockItem {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getRiskColor(risk: string) {
-  return (
-    risk === "high" ? "bg-danger text-white" :
-    risk === "medium" ? "bg-warning text-foreground" :
-    "bg-success text-white"
-  )
+  if (risk === "high") return "bg-red-500 text-white"
+  if (risk === "medium") return "bg-yellow-400 text-black"
+  return "bg-green-500 text-white"
 }
 
 function getRiskIcon(risk: string) {
@@ -55,15 +53,17 @@ function getRiskIcon(risk: string) {
 }
 
 function getProgressColor(pct: number) {
-  if (pct <= 20) return "bg-danger"
-  if (pct <= 50) return "bg-warning"
-  return "bg-success"
+  if (pct <= 20) return "bg-red-500"
+  if (pct <= 50) return "bg-yellow-400"
+  return "bg-green-500"
 }
 
+// ⚠️ Recharts renders SVG — CSS vars like hsl(var(--danger)) don't resolve in SVG.
+// Always use hardcoded hex colors for Recharts fills.
 function getBarFill(risk: string) {
-  if (risk === "high") return "#ef4444"    // red
-  if (risk === "medium") return "#eab308"  // yellow
-  return "#22c55e"                         // green
+  if (risk === "high") return "#ef4444"    // red-500
+  if (risk === "medium") return "#eab308"  // yellow-500
+  return "#22c55e"                         // green-500
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -72,11 +72,7 @@ export function StockManagement() {
   const [stockItems, setStockItems] = useState<StockItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Table search
   const [searchTerm, setSearchTerm] = useState("")
-
-  // Adjust dialog state
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [adjustAmount, setAdjustAmount] = useState("")
@@ -88,12 +84,15 @@ export function StockManagement() {
     try {
       setError(null)
       const res = await fetch("/api/stock")
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.details ?? body?.error ?? `HTTP ${res.status}`)
+      }
       const data: StockItem[] = await res.json()
       setStockItems(data)
-    } catch (err) {
-      console.error("[StockManagement] fetch error:", err)
-      setError("Failed to load stock data. Please try again.")
+    } catch (err: any) {
+      console.error("[StockManagement] fetch error:", err?.message ?? err)
+      setError(err?.message ?? "Failed to load stock data.")
     } finally {
       setLoading(false)
     }
@@ -101,28 +100,20 @@ export function StockManagement() {
 
   useEffect(() => { fetchStock() }, [fetchStock])
 
-  // ── Adjust stock ────────────────────────────────────────────────────────────
+  // ── Adjust ──────────────────────────────────────────────────────────────────
 
   const handleAdjust = async (action: "add" | "subtract") => {
     if (!selectedItem || !adjustAmount) return
-
     setIsUpdating(true)
     try {
       const res = await fetch("/api/stock", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: selectedItem.id,
-          quantity: Number(adjustAmount),
-          action,
-        }),
+        body: JSON.stringify({ id: selectedItem.id, quantity: Number(adjustAmount), action }),
       })
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-      // Merge updated item back into list without full refetch
       const updated: StockItem = await res.json()
-      setStockItems(prev => prev.map(i => (i.id === updated.id ? updated : i)))
+      setStockItems(prev => prev.map(i => i.id === updated.id ? updated : i))
     } catch (err) {
       console.error("[StockManagement] update error:", err)
     } finally {
@@ -134,18 +125,13 @@ export function StockManagement() {
   }
 
   const openDialog = (item: StockItem) => {
-    setSelectedItem(item)
-    setAdjustAmount("")
-    setDialogOpen(true)
+    setSelectedItem(item); setAdjustAmount(""); setDialogOpen(true)
   }
-
   const closeDialog = () => {
-    setDialogOpen(false)
-    setSelectedItem(null)
-    setAdjustAmount("")
+    setDialogOpen(false); setSelectedItem(null); setAdjustAmount("")
   }
 
-  // ── Derived data ────────────────────────────────────────────────────────────
+  // ── Derived ─────────────────────────────────────────────────────────────────
 
   const filtered = stockItems.filter(item =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -160,11 +146,10 @@ export function StockManagement() {
   const chartData = stockItems.map(item => ({
     name: item.name.length > 10 ? item.name.slice(0, 10) + "…" : item.name,
     stock: item.currentStock,
-    min: item.minStock,
     fill: getBarFill(item.riskLevel),
   }))
 
-  // ── Loading / error states ──────────────────────────────────────────────────
+  // ── States ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -177,9 +162,16 @@ export function StockManagement() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <AlertTriangle className="h-10 w-10 text-danger" />
-        <p className="text-muted-foreground">{error}</p>
+      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center px-4">
+        <AlertTriangle className="h-10 w-10 text-red-500" />
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">Failed to load stock</p>
+          <p className="text-sm text-muted-foreground font-mono bg-muted px-3 py-1 rounded">{error}</p>
+          <p className="text-xs text-muted-foreground">
+            If this is a relation error, run{" "}
+            <code className="bg-muted px-1 rounded">npx prisma generate</code>
+          </p>
+        </div>
         <Button variant="outline" onClick={fetchStock}>
           <RefreshCw className="h-4 w-4 mr-2" /> Retry
         </Button>
@@ -192,7 +184,7 @@ export function StockManagement() {
   return (
     <div className="space-y-6">
 
-      {/* ── Page header ──────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Stock Management</h2>
@@ -200,7 +192,6 @@ export function StockManagement() {
             Real-time inventory · {stockItems.length} items tracked
           </p>
         </div>
-
         <div className="flex items-center gap-2">
           {highRisk.length > 0 && (
             <Badge variant="destructive" className="flex items-center gap-1.5 animate-pulse">
@@ -214,13 +205,13 @@ export function StockManagement() {
         </div>
       </div>
 
-      {/* ── Summary cards ────────────────────────────────────────────────── */}
+      {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Total Items",  value: stockItems.length, icon: Package,       color: "text-primary" },
-          { label: "Critical",     value: highRisk.length,   icon: AlertTriangle, color: "text-danger"  },
-          { label: "Medium Risk",  value: medRisk.length,    icon: AlertCircle,   color: "text-warning" },
-          { label: "Healthy",      value: lowRisk.length,    icon: CheckCircle,   color: "text-success" },
+          { label: "Total Items", value: stockItems.length, icon: Package,       color: "text-primary"    },
+          { label: "Critical",    value: highRisk.length,   icon: AlertTriangle, color: "text-red-500"    },
+          { label: "Medium Risk", value: medRisk.length,    icon: AlertCircle,   color: "text-yellow-500" },
+          { label: "Healthy",     value: lowRisk.length,    icon: CheckCircle,   color: "text-green-500"  },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardContent className="flex items-center gap-4 pt-6">
@@ -234,30 +225,45 @@ export function StockManagement() {
         ))}
       </div>
 
-      {/* ── Bar chart ────────────────────────────────────────────────────── */}
+      {/* Bar chart */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Package className="h-4 w-4 text-primary" />
             Stock Level Overview
           </CardTitle>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-red-500 inline-block" /> Critical
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-yellow-400 inline-block" /> Medium
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-green-500 inline-block" /> Healthy
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="h-[200px]">
+          <div className="h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
                     borderRadius: "8px",
                     fontSize: 12,
                   }}
@@ -274,7 +280,7 @@ export function StockManagement() {
         </CardContent>
       </Card>
 
-      {/* ── Inventory table ──────────────────────────────────────────────── */}
+      {/* Inventory table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -309,27 +315,22 @@ export function StockManagement() {
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
-
                 <TableBody>
                   {filtered.map(item => {
                     const pct = Math.min(100, (item.currentStock / item.maxStock) * 100)
-
                     return (
                       <TableRow
                         key={item.id}
-                        className={item.riskLevel === "high" ? "bg-danger/5" : ""}
+                        className={item.riskLevel === "high" ? "bg-red-500/5" : ""}
                       >
-                        {/* Name */}
                         <TableCell className="font-medium">{item.name}</TableCell>
 
-                        {/* Category */}
                         <TableCell>
                           <Badge variant="outline" className="capitalize text-xs">
                             {item.category}
                           </Badge>
                         </TableCell>
 
-                        {/* Progress bar */}
                         <TableCell>
                           <div className="space-y-1 min-w-[130px]">
                             <div className="flex justify-between text-xs text-muted-foreground">
@@ -347,22 +348,17 @@ export function StockManagement() {
                           </div>
                         </TableCell>
 
-                        {/* Risk badge */}
                         <TableCell>
-                          <Badge
-                            className={`flex items-center gap-1 w-fit text-xs capitalize ${getRiskColor(item.riskLevel)}`}
-                          >
+                          <Badge className={`flex items-center gap-1 w-fit text-xs capitalize ${getRiskColor(item.riskLevel)}`}>
                             {getRiskIcon(item.riskLevel)}
                             {item.riskLevel}
                           </Badge>
                         </TableCell>
 
-                        {/* Vendor */}
                         <TableCell className="text-sm text-muted-foreground">
                           {item.vendor}
                         </TableCell>
 
-                        {/* Adjust button + dialog */}
                         <TableCell className="text-right">
                           <Dialog
                             open={dialogOpen && selectedItem?.id === item.id}
@@ -370,8 +366,7 @@ export function StockManagement() {
                           >
                             <DialogTrigger asChild>
                               <Button variant="outline" size="sm" onClick={() => openDialog(item)}>
-                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                                Adjust
+                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Adjust
                               </Button>
                             </DialogTrigger>
 
@@ -379,9 +374,7 @@ export function StockManagement() {
                               <DialogHeader>
                                 <DialogTitle>Adjust Stock</DialogTitle>
                                 <DialogDescription>
-                                  <span className="font-medium text-foreground">
-                                    {selectedItem?.name}
-                                  </span>
+                                  <span className="font-medium text-foreground">{selectedItem?.name}</span>
                                   {" "}· Current:{" "}
                                   <span className="font-medium text-foreground">
                                     {selectedItem?.currentStock} {selectedItem?.unit}
@@ -390,9 +383,7 @@ export function StockManagement() {
                               </DialogHeader>
 
                               <div className="py-2 space-y-2">
-                                <Label htmlFor="adjust-amount">
-                                  Amount ({selectedItem?.unit})
-                                </Label>
+                                <Label htmlFor="adjust-amount">Amount ({selectedItem?.unit})</Label>
                                 <Input
                                   id="adjust-amount"
                                   type="number"
@@ -403,17 +394,14 @@ export function StockManagement() {
                                 />
                               </div>
 
-                              <DialogFooter className="gap-2 sm:gap-2">
+                              <DialogFooter className="gap-2">
                                 <Button
                                   variant="outline"
                                   className="flex-1 gap-1.5"
                                   disabled={isUpdating || !adjustAmount || Number(adjustAmount) <= 0}
                                   onClick={() => handleAdjust("subtract")}
                                 >
-                                  {isUpdating
-                                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                                    : <Minus className="h-4 w-4" />
-                                  }
+                                  {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Minus className="h-4 w-4" />}
                                   Remove
                                 </Button>
                                 <Button
@@ -421,10 +409,7 @@ export function StockManagement() {
                                   disabled={isUpdating || !adjustAmount || Number(adjustAmount) <= 0}
                                   onClick={() => handleAdjust("add")}
                                 >
-                                  {isUpdating
-                                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                                    : <Plus className="h-4 w-4" />
-                                  }
+                                  {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                                   Add Stock
                                 </Button>
                               </DialogFooter>
@@ -441,11 +426,11 @@ export function StockManagement() {
         </CardContent>
       </Card>
 
-      {/* ── Reorder recommendations ──────────────────────────────────────── */}
+      {/* Reorder recommendations */}
       {highRisk.length > 0 && (
-        <Card className="border-danger/30 bg-danger/5">
+        <Card className="border-red-500/30 bg-red-500/5">
           <CardHeader>
-            <CardTitle className="text-danger flex items-center gap-2 text-base">
+            <CardTitle className="text-red-500 flex items-center gap-2 text-base">
               <AlertTriangle className="h-4 w-4" />
               Reorder Recommendations
               <Badge variant="destructive" className="ml-auto">
@@ -456,33 +441,22 @@ export function StockManagement() {
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {highRisk.map(item => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-lg bg-card border border-danger/20 space-y-2"
-                >
+                <div key={item.id} className="p-4 rounded-lg bg-card border border-red-500/20 space-y-2">
                   <div className="flex justify-between items-start gap-2">
                     <p className="font-medium text-sm leading-tight">{item.name}</p>
                     <Badge variant="destructive" className="text-xs shrink-0">Urgent</Badge>
                   </div>
-
                   <p className="text-xs text-muted-foreground">
-                    {item.currentStock} {item.unit} remaining
-                    {" · "}
-                    min {item.minStock} {item.unit}
+                    {item.currentStock} {item.unit} remaining · min {item.minStock} {item.unit}
                   </p>
-
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-danger"
-                      style={{
-                        width: `${Math.min(100, (item.currentStock / item.maxStock) * 100)}%`
-                      }}
+                      className="h-full rounded-full bg-red-500"
+                      style={{ width: `${Math.min(100, (item.currentStock / item.maxStock) * 100)}%` }}
                     />
                   </div>
-
                   <p className="text-xs text-muted-foreground">
-                    Vendor:{" "}
-                    <span className="font-medium text-foreground">{item.vendor}</span>
+                    Vendor: <span className="font-medium text-foreground">{item.vendor}</span>
                   </p>
                 </div>
               ))}

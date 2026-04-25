@@ -1,19 +1,18 @@
+// app/api/stock/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
 function mapToStockItem(item: any) {
-  // Logic: Max stock is 5x the reorder level
   const maxStock = item.reorderLevel * 5
   const pct = item.quantity / maxStock
 
-  // Define Risk Level based on percentage of "Full" capacity
   let riskLevel: 'high' | 'medium' | 'low' = 'low'
   if (pct <= 0.2 || item.quantity <= item.reorderLevel) {
-    riskLevel = 'high' // Critical
+    riskLevel = 'high'
   } else if (pct <= 0.5) {
-    riskLevel = 'medium' // Warning
+    riskLevel = 'medium'
   }
 
   return {
@@ -26,20 +25,37 @@ function mapToStockItem(item: any) {
     category: item.category ?? 'general',
     riskLevel,
     isLowStock: item.quantity <= item.reorderLevel,
+    // vendor relation may not exist in generated client yet — safe fallback
     vendor: item.vendor?.name ?? 'Unknown',
     lastRestocked: item.lastRestocked?.toISOString() ?? null,
   }
 }
 
+// ─── GET /api/stock ───────────────────────────────────────────────────────────
 export async function GET() {
   try {
-    const stocks = await prisma.stock.findMany({
-      orderBy: { name: 'asc' },
-      include: { vendor: true },
-    })
+    // Try with vendor relation first; fall back if client not regenerated yet
+    let stocks: any[]
+    try {
+      stocks = await prisma.stock.findMany({
+        orderBy: { name: 'asc' },
+        include: { vendor: true },
+      })
+    } catch {
+      // Prisma client hasn't been regenerated after adding vendor relation.
+      // Run `npx prisma generate` to fix permanently.
+      stocks = await prisma.stock.findMany({
+        orderBy: { name: 'asc' },
+      })
+    }
+
     return NextResponse.json(stocks.map(mapToStockItem))
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
+  } catch (error: any) {
+    console.error('[GET /api/stock]', error?.message ?? error)
+    return NextResponse.json(
+      { error: 'Failed to fetch stock', details: error?.message },
+      { status: 500 }
+    )
   }
 }
 
@@ -66,12 +82,11 @@ export async function POST(request: Request) {
         lastRestocked: new Date(),
         ...(vendorId ? { vendorId } : {}),
       },
-      include: { vendor: true },
     })
 
     return NextResponse.json(mapToStockItem(stock), { status: 201 })
-  } catch (error) {
-    console.error('[POST /api/stock]', error)
+  } catch (error: any) {
+    console.error('[POST /api/stock]', error?.message ?? error)
     return NextResponse.json({ error: 'Failed to create stock item' }, { status: 500 })
   }
 }
@@ -121,30 +136,26 @@ export async function PATCH(request: Request) {
         quantity: newQuantity,
         lastRestocked: action === 'add' ? new Date() : current.lastRestocked,
       },
-      include: { vendor: true },
     })
 
     return NextResponse.json(mapToStockItem(updated))
-  } catch (error) {
-    console.error('[PATCH /api/stock]', error)
+  } catch (error: any) {
+    console.error('[PATCH /api/stock]', error?.message ?? error)
     return NextResponse.json({ error: 'Failed to update stock' }, { status: 500 })
   }
 }
 
 // ─── DELETE /api/stock ────────────────────────────────────────────────────────
-// Body: { id: string }
 export async function DELETE(request: Request) {
   try {
     const { id } = await request.json()
-
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
-
     await prisma.stock.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('[DELETE /api/stock]', error)
+  } catch (error: any) {
+    console.error('[DELETE /api/stock]', error?.message ?? error)
     return NextResponse.json({ error: 'Failed to delete stock item' }, { status: 500 })
   }
 }
