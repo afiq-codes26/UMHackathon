@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingCart, AlertTriangle,
-  Clock, Package, Trash2, Users, Zap,
+  Clock, Package, Trash2, Users, Zap, CheckCircle
 } from "lucide-react"
 import { promotionalEvents } from "@/lib/mock-data"
 import { useLiveDataContext } from "@/lib/live-data-context"
@@ -279,57 +279,53 @@ export function DashboardOverview() {
       {/* Rest of the UI (Alerts, Quick Stats) remains the same... */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ... Critical Stock Alerts & Upcoming Events ... */}
-        <Card className="h-full border-danger/20 shadow-sm">
+        <Card className="h-full border-danger/30 bg-danger/5 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-danger text-lg font-bold">
+            <CardTitle className="text-danger flex items-center gap-2 text-lg font-bold">
               <AlertTriangle className="h-5 w-5" />
-              Critical Stock Alerts
+              Reorder Recommendations
             </CardTitle>
             <p className="text-xs text-muted-foreground italic">
-              Live tracking active. fulfillment actions are managed on the Stock page.
+              Automated replenishment suggestions based on current inventory levels.
             </p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="grid gap-3">
               {lowStockItems.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-danger/5 to-transparent border border-danger/10"
+                  className="p-4 rounded-xl bg-background border border-danger/20 hover:border-danger/40 transition-colors shadow-sm"
                 >
-                  {/* LEFT PART: Aligned with your simulation and stock page */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-extrabold text-foreground tracking-tight">{item.name}</p>
-                      <Badge variant="outline" className="text-[10px] font-bold uppercase border-danger text-danger bg-danger/5 px-1.5 h-4">
-                        Urgent
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-bold text-danger tabular-nums">
-                        {item.currentStock.toFixed(2)} {item.unit}
-                      </span> remaining (Min: {item.minStock})
-                    </p>
+                  <div className="flex justify-between items-start mb-1">
+                    <p className="font-bold text-foreground">{item.name}</p>
+                    <Badge variant="destructive" className="text-[10px] uppercase font-bold animate-pulse">
+                      Urgent
+                    </Badge>
                   </div>
 
-                  {/* RIGHT PART: Simplified two-row layout */}
-                  <div className="text-right">
-                    <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1.5">
-                      System Status
-                    </p>
-                    <div className="flex items-center justify-end gap-2 text-amber-600">
-                      <span className="text-xs font-bold uppercase tracking-tight">Awaiting Action</span>
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                      </span>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Only <span className="font-bold text-danger">{item.currentStock.toFixed(2)} {item.unit}</span> left • Min: {item.minStock} {item.unit}
+                  </p>
+
+                  <div className="flex justify-between items-end border-t pt-2 mt-2 border-dashed border-muted">
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold">Preferred Vendor</p>
+                      <p className="text-sm font-medium">{item.vendor || "Market Supplier"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold">Est. Cost</p>
+                      <p className="text-sm font-bold text-danger">
+                        RM {((item.maxStock - item.currentStock) * (item.costPerUnit || 5.5)).toFixed(2)}
+                      </p>
                     </div>
                   </div>
                 </div>
               ))}
 
               {lowStockItems.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 text-center border-2 border-dashed border-muted/50 rounded-2xl">
-                  <p className="text-sm font-bold text-foreground">All stock levels healthy!</p>
+                <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-muted rounded-xl bg-background/50">
+                  <CheckCircle className="h-8 w-8 text-success mb-2 opacity-50" />
+                  <p className="text-sm font-medium text-muted-foreground">Inventory Levels Optimal</p>
                 </div>
               )}
             </div>
