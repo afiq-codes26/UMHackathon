@@ -1,6 +1,8 @@
 # UM Hackathon 2026
 ## MindaFinancial
 
+Pitching Video Recording: https://tinyurl.com/yddd2h3c
+
 To install dependencies:
 
 ```bash
