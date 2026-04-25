@@ -32,6 +32,7 @@ export function StockManagement() {
   const [isUpdating, setIsUpdating] = useState(false)
 
   const filteredItems = stockItems.filter(item =>
+  const filteredItems = stockItems.filter(item =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.category.toLowerCase().includes(searchTerm.toLowerCase())
   )
