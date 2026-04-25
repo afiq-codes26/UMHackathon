@@ -1,0 +1,102 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("user") // "user" | "admin"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactions Transaction[]
+  vendors      Vendor[]
+}
+
+// Vendor model (from your mock data)
+model Vendor {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  category    String? // "food", "supplies", "services", etc.
+  status      String   @default("active") // "active" | "inactive"
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  transactions Transaction[]
+}
+
+// Transaction model (from your mock data)
+model Transaction {
+  id          String   @id @default(cuid())
+  amount      Float
+  type        String // "expense" | "income"
+  category    String // "food", "supplies", "utilities", etc.
+  description String?
+  date        DateTime @default(now())
+  status      String   @default("completed") // "pending" | "completed" | "cancelled"
+  vendorId    String?
+  vendor      Vendor?  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Stock/Inventory model
+model Stock {
+  id          String   @id @default(cuid())
+  name        String
+  quantity    Int
+  unit        String // "kg", "liters", "pieces", etc.
+  category    String // "ingredients", "supplies", "packaging", etc.
+  reorderLevel Int     @default(10)
+  lastRestocked DateTime?
+
+  userId String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Waste Tracking model
+model Waste {
+  id        String   @id @default(cuid())
+  item      String
+  quantity  Float
+  unit      String
+  reason    String // "expired", "spoiled", "damaged", etc.
+  cost      Float?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Rush Order model
+model RushOrder {
+  id          String   @id @default(cuid())
+  customerName String
+  items       String // JSON string of items
+  totalAmount Float
+  status      String   @default("pending") // "pending" | "preparing" | "completed"
+  priority    String   @default("normal") // "normal" | "high" | "urgent"
+  notes       String?
+  orderDate   DateTime @default(now())
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
