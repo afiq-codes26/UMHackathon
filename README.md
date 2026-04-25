@@ -15,7 +15,7 @@ To run the code:
 npm run dev
 ```
 
-TO run prisma:
+To run prisma:
 ```bash
 npx prisma migrate dev
 ```
