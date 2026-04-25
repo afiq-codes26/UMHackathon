@@ -1,6 +1,6 @@
 # UM Hackathon 2026
-# MindaFinancial
-By Team Alpha Data
+## MindaFinancial
+### By Team Alpha Data
 
 To install dependencies:
 
