@@ -23,11 +23,14 @@ import {
   Calendar,
   Filter
 } from "lucide-react"
-import { transactions, type Transaction } from "@/lib/mock-data"
+import { transactions as fallbackTransactions, type Transaction } from "@/lib/mock-data"
+import { useLiveDataContext } from "@/app/page"
 import { format, parseISO } from "date-fns"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
 export function TransactionHistory() {
+  const liveData = useLiveDataContext()
+  const transactions: Transaction[] = liveData?.transactions ?? fallbackTransactions
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<string>("all")
