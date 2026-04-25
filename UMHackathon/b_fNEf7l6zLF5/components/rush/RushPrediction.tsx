@@ -430,7 +430,7 @@ export function RushPrediction() {
 
               return (
                 // ... UI continues
-                <div key={i} className={`p-4 rounded-xl border bg-card transition-all ${isCritical ? 'border-danger/40 bg-danger/[0.02]' : 'border-border'}`}>
+                <div key={i} className={`p-4 rounded-xl border transition-all ${isCritical ? 'border-danger/40 bg-danger/10' : 'border-border bg-card'}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-foreground">{rec.item}</p>
