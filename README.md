@@ -14,3 +14,8 @@ To run the code:
 ```bash
 npm run dev
 ```
+
+TO run prisma:
+```bash
+npx prisma migrate dev
+```
