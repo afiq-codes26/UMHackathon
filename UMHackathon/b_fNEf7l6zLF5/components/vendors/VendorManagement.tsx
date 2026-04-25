@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -24,8 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { 
-  Users, 
+import {
+  Users,
   Phone,
   Mail,
   MapPin,
@@ -50,7 +50,7 @@ interface PendingOrder {
 }
 
 export function VendorManagement() {
-  const [vendors] = useState<Vendor[]>(initialVendors)
+  const [vendors, setVendors] = useState<Vendor[]>(initialVendors)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false)
@@ -58,13 +58,25 @@ export function VendorManagement() {
   const [orderNotes, setOrderNotes] = useState("")
   const [orderItems, setOrderItems] = useState<{ [key: string]: number }>({})
 
-  const filteredVendors = vendors.filter(vendor => 
+  // Add Vendor State
+  const [isAddVendorOpen, setIsAddVendorOpen] = useState(false)
+  const [newVendor, setNewVendor] = useState({
+    name: "",
+    contact: "",
+    email: "",
+    phone: "",
+    address: "",
+    leadTime: "1",
+    items: ""
+  })
+
+  const filteredVendors = vendors.filter(vendor =>
     vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     vendor.contact.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const orderVolumeData = vendors.map(v => ({
-    name: v.name.length > 12 ? v.name.substring(0, 12) + '...' : v.name,
+    name: v.name,
     orders: v.totalOrders,
     value: v.averageOrderValue
   }))
@@ -75,9 +87,30 @@ export function VendorManagement() {
     return stockItems.filter(item => item.vendor === vendor.name)
   }
 
+  const handleAddVendor = () => {
+    const id = `v-${vendors.length + 1}`
+    const vendorToAdd: Vendor = {
+      id,
+      name: newVendor.name,
+      contact: newVendor.contact,
+      email: newVendor.email,
+      phone: newVendor.phone,
+      address: newVendor.address,
+      leadTime: parseInt(newVendor.leadTime) || 1,
+      items: newVendor.items.split(",").map(i => i.trim()).filter(i => i !== ""),
+      totalOrders: 0,
+      averageOrderValue: 0,
+      lastOrder: "Never"
+    }
+    
+    setVendors([vendorToAdd, ...vendors])
+    setIsAddVendorOpen(false)
+    setNewVendor({ name: "", contact: "", email: "", phone: "", address: "", leadTime: "1", items: "" })
+  }
+
   const handleCreateOrder = () => {
     if (!selectedVendor) return
-    
+
     const itemsToOrder = Object.entries(orderItems)
       .filter(([_, qty]) => qty > 0)
       .map(([name, quantity]) => {
@@ -114,10 +147,70 @@ export function VendorManagement() {
           <h2 className="text-2xl font-bold text-foreground">Vendor Management</h2>
           <p className="text-muted-foreground">Manage supplier relationships and orders</p>
         </div>
-        <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 w-fit">
-          <Plus className="h-4 w-4" />
-          Add New Vendor
-        </Button>
+        
+        <Dialog open={isAddVendorOpen} onOpenChange={setIsAddVendorOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 w-fit">
+              <Plus className="h-4 w-4" />
+              Add New Vendor
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Register New Vendor</DialogTitle>
+              <DialogDescription>
+                Enter the supplier details to add them to your procurement network.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Company Name</Label>
+                  <Input id="name" placeholder="e.g. Fresh Catch Seafood" 
+                    value={newVendor.name} onChange={(e) => setNewVendor({...newVendor, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contact">Contact Person</Label>
+                  <Input id="contact" placeholder="e.g. John Doe" 
+                    value={newVendor.contact} onChange={(e) => setNewVendor({...newVendor, contact: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" placeholder="vendor@example.com" 
+                    value={newVendor.email} onChange={(e) => setNewVendor({...newVendor, email: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input id="phone" placeholder="+60 12-345 6789" 
+                    value={newVendor.phone} onChange={(e) => setNewVendor({...newVendor, phone: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="items">Supplied Items (Comma separated)</Label>
+                  <Input id="items" placeholder="Chicken, Beef, Eggs..." 
+                    value={newVendor.items} onChange={(e) => setNewVendor({...newVendor, items: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="leadTime">Lead Time (Days)</Label>
+                  <Input id="leadTime" type="number" min="1"
+                    value={newVendor.leadTime} onChange={(e) => setNewVendor({...newVendor, leadTime: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Warehouse Address</Label>
+                <Textarea id="address" placeholder="Full street address..." 
+                  value={newVendor.address} onChange={(e) => setNewVendor({...newVendor, address: e.target.value})} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddVendorOpen(false)}>Cancel</Button>
+              <Button onClick={handleAddVendor} className="bg-primary text-primary-foreground">Save Vendor</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats Overview */}
@@ -172,32 +265,79 @@ export function VendorManagement() {
       </div>
 
       {/* Order Volume Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
+      <Card className="border border-muted/20 shadow-lg bg-card/50 backdrop-blur">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             Order Volume by Vendor
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[250px]">
+          <div className="h-[350px] w-full mt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={orderVolumeData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                  formatter={(value: number, name: string) => [
-                    name === 'orders' ? value : `RM ${value}`,
-                    name === 'orders' ? 'Total Orders' : 'Avg Order Value'
-                  ]}
+              <BarChart
+                data={orderVolumeData}
+                layout="vertical"
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  horizontal={false}
+                  stroke="#e2e8f0"
+                  opacity={0.8}
                 />
-                <Bar dataKey="orders" name="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+
+                <XAxis type="number" hide />
+
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }}
+                  width={140}
+                  axisLine={false}
+                  tickLine={false}
+                />
+
+                <Tooltip
+                  cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-white/95 backdrop-blur-md p-4 border border-slate-200 rounded-xl shadow-2xl min-w-[200px]">
+                          <p className="font-extrabold text-slate-800 text-base border-b pb-2 mb-2">
+                            {payload[0].payload.name}
+                          </p>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 text-xs uppercase font-bold tracking-wider">Orders</span>
+                              <span className="font-mono font-black text-blue-600 text-lg">{payload[0].value}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 text-xs uppercase font-bold tracking-wider">Avg Value</span>
+                              <span className="font-mono font-black text-emerald-600 text-lg">RM {payload[0].payload.value}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+
+                <Bar
+                  dataKey="orders"
+                  fill="url(#barGradient)"
+                  radius={[0, 10, 10, 0]}
+                  barSize={32}
+                  animationDuration={1500}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
