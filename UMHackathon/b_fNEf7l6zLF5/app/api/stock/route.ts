@@ -1,124 +1,41 @@
-/*import { NextRequest, NextResponse } from 'next/server'
-import { updateStock, getStore } from '@/lib/store'
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-export const dynamic = 'force-dynamic'
-
-export async function PATCH(req: NextRequest) {
-  const { id, delta } = await req.json()
-  if (!id || typeof delta !== 'number') {
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-  }
-  updateStock(id, delta)
-  return NextResponse.json({ stockItems: getStore().stockItems, metrics: getStore().metrics })
-}*/
-
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
- 
-// GET /api/stock - Get all stock items
 export async function GET() {
   try {
-    const stock = await prisma.stock.findMany({
-      orderBy: {
-        name: 'asc',
-      },
-    })
- 
-    // Add low stock indicator
-    const stockWithAlerts = stock.map(item => ({
-      ...item,
-      isLowStock: item.quantity <= item.reorderLevel,
-    }))
- 
-    return NextResponse.json(stockWithAlerts)
+    const stock = await prisma.stock.findMany();
+
+    const formattedStock = stock.map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      currentStock: Number(item.quantity),
+      unit: item.unit || "kg",
+      // Hardcoded logic for the UI indicators
+      isLow: item.quantity <= 5, 
+      lastUpdated: item.updatedAt
+    }));
+
+    return NextResponse.json(formattedStock);
   } catch (error) {
-    console.error('Error fetching stock:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch stock' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }
 }
- 
-// POST /api/stock - Create a new stock item
-export async function POST(request: Request) {
+
+export async function POST(req: Request) {
   try {
-    const body = await request.json()
-    const { name, quantity, unit, category, reorderLevel } = body
- 
-    if (!name || quantity === undefined || !unit) {
-      return NextResponse.json(
-        { error: 'Name, quantity, and unit are required' },
-        { status: 400 }
-      )
-    }
- 
-    const stock = await prisma.stock.create({
-      data: {
-        name,
-        quantity: parseInt(quantity),
-        unit,
-        category,
-        reorderLevel: reorderLevel ? parseInt(reorderLevel) : 10,
-        lastRestocked: new Date(),
-      },
-    })
- 
-    return NextResponse.json(stock, { status: 201 })
-  } catch (error) {
-    console.error('Error creating stock item:', error)
-    return NextResponse.json(
-      { error: 'Failed to create stock item' },
-      { status: 500 }
-    )
-  }
-}
- 
-// PATCH /api/stock - Update stock quantity
-export async function PATCH(request: Request) {
-  try {
-    const body = await request.json()
-    const { id, quantity, action } = body // action: "add" | "subtract" | "set"
- 
-    if (!id || quantity === undefined) {
-      return NextResponse.json(
-        { error: 'ID and quantity are required' },
-        { status: 400 }
-      )
-    }
- 
-    const currentStock = await prisma.stock.findUnique({
+    const { id, amount, type } = await req.json();
+    const current = await prisma.stock.findUnique({ where: { id } });
+    if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const newQty = type === 'add' ? current.quantity + amount : Math.max(0, current.quantity - amount);
+
+    await prisma.stock.update({
       where: { id },
-    })
- 
-    if (!currentStock) {
-      return NextResponse.json(
-        { error: 'Stock item not found' },
-        { status: 404 }
-      )
-    }
- 
-    let newQuantity = parseInt(quantity)
-    if (action === 'add') {
-      newQuantity = currentStock.quantity + parseInt(quantity)
-    } else if (action === 'subtract') {
-      newQuantity = Math.max(0, currentStock.quantity - parseInt(quantity))
-    }
- 
-    const updatedStock = await prisma.stock.update({
-      where: { id },
-      data: {
-        quantity: newQuantity,
-        lastRestocked: action === 'add' ? new Date() : currentStock.lastRestocked,
-      },
-    })
- 
-    return NextResponse.json(updatedStock)
-  } catch (error) {
-    console.error('Error updating stock:', error)
-    return NextResponse.json(
-      { error: 'Failed to update stock' },
-      { status: 500 }
-    )
+      data: { quantity: newQty }
+    });
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
