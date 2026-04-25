@@ -46,6 +46,8 @@ export function StockManagement() {
   const [adjustmentAmount, setAdjustmentAmount] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isChickenOrdered, setIsChickenOrdered] = useState(false);
+  const [isOilOrdered, setIsOilOrdered] = useState(false); // New
+  const [isSambalSnoozed, setIsSambalSnoozed] = useState(false);
 
   const filteredItems = stockItems.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -119,12 +121,53 @@ export function StockManagement() {
   }
 
   const chartData = stockItems.map(item => ({
-    name: item.name.length > 10 ? item.name.substring(0, 10) + '...' : item.name,
-    current: item.currentStock,
-    predicted: item.predictedUsage,
-    risk: item.riskLevel
+  name: item.name, // Remove the .substring or ternary operator here
+  current: item.currentStock,
+  predicted: item.predictedUsage,
+  risk: item.riskLevel
   }))
   
+  const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    // Get the risk level from the data of the hovered bar
+    const risk = payload[0].payload.risk; 
+
+    // Define colors based on risk
+    const getColor = (risk: string) => {
+      switch (risk) {
+        case 'high': return 'text-red-500';    // Critical
+        case 'medium': return 'text-amber-500'; // Monitor
+        case 'low': return 'text-green-500';    // Good
+        default: return 'text-primary';
+      }
+    };
+
+    return (
+      <div className="bg-white/95 border border-border p-3 rounded-xl shadow-2xl backdrop-blur-sm min-w-[140px]">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2 border-b pb-1">
+          {label}
+        </p>
+        <div className="space-y-1.5">
+          <p className="text-sm flex justify-between items-center gap-4">
+            <span className="text-muted-foreground font-medium">Current:</span>
+            {/* This span now uses our dynamic color function */}
+            <span className={`font-bold ${getColor(risk)}`}>
+              {payload[0].value}kg
+            </span>
+          </p>
+          <p className="text-sm flex justify-between items-center gap-4">
+            <span className="text-muted-foreground font-medium">Predicted:</span>
+            <span className="font-bold text-slate-700">
+              {payload[1].value}kg
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -211,13 +254,8 @@ export function StockManagement() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                 <YAxis dataKey="name" type="category" width={80} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                />
+                <Tooltip content={<CustomTooltip />} />
+                
                 <Bar dataKey="current" name="Current Stock" radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (
                     <Cell 
@@ -362,90 +400,126 @@ export function StockManagement() {
       </Card>
 
       {/* AI Recommendations */}
-<Card className="border-primary/20 bg-primary/5 shadow-lg">
-  <CardHeader className="flex flex-row items-center justify-between">
-    <CardTitle className="flex items-center gap-2">
-      <span className="text-2xl animate-pulse">🤖</span>
-      Z.AI Smart Recommendations
-    </CardTitle>
-    <Button 
-      variant="outline" 
-      size="sm" 
-      onClick={() => {
-        setIsAnalyzing(true);
-        setTimeout(() => setIsAnalyzing(false), 1500); // Fake a 1.5s delay
-      }}
-      disabled={isAnalyzing}
-    >
-      {isAnalyzing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-      {isAnalyzing ? "Analyzing Patterns..." : "Re-scan with Z.AI"}
-    </Button>
-    <Button variant="ghost" size="sm" className="text-xs">
-      <RefreshCw className="mr-2 h-3 w-3" /> Re-scan Data
-    </Button>
-  </CardHeader>
-  <CardContent>
-    <div className="grid gap-4 md:grid-cols-3">
-      {/* Chicken Thigh Action Card */}
-      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all group">
-        <div className="flex justify-between items-start mb-2">
-           <Badge className="bg-danger/10 text-danger border-danger/20">Critical</Badge>
-           <TrendingUp className="h-4 w-4 text-danger" />
-        </div>
-        <p className="font-bold text-foreground">Order 30kg Chicken Thigh</p>
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          AI detected a supply gap. You have <span className="text-danger font-bold">12kg</span> remaining, but predicted demand is <span className="font-bold">15kg/day</span>.
-        </p>
-        <Button 
-          variant="default" 
-          className="w-full mt-4 bg-primary hover:scale-105 transition-transform"
-         onClick={() => {
-         
-          setStockItems(prev => prev.map(item => 
-            item.name.includes("Chicken Thigh") 
-              ? { ...item, currentStock: item.currentStock + 30, riskLevel: 'low' } 
-              : item
-          ));
-          
-          setIsChickenOrdered(true);
-          alert("Order placed! Stock updated.");
-        }}
-        >
-          Approve Order
-        </Button>
-      </div>
+      <Card className="border-primary/20 bg-primary/5 shadow-lg">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <span className="text-2xl animate-pulse">🤖</span>
+            Z.AI Smart Recommendations
+          </CardTitle>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setIsAnalyzing(true);
+              setTimeout(() => setIsAnalyzing(false), 1500);
+            }}
+            disabled={isAnalyzing}
+          >
+            {isAnalyzing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {isAnalyzing ? "Analyzing Patterns..." : "Re-scan with Z.AI"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Chicken Thigh Action Card */}
+            <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all group">
+              <div className="flex justify-between items-start mb-2">
+                 <Badge className="bg-danger/10 text-danger border-danger/20">Critical</Badge>
+                 <TrendingUp className="h-4 w-4 text-danger" />
+              </div>
+              <p className="font-bold text-foreground">Order 30kg Chicken Thigh</p>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                AI detected a supply gap. You have <span className="text-danger font-bold">12kg</span> remaining, but predicted demand is <span className="font-bold">15kg/day</span>.
+              </p>
+              <Button 
+                variant={isChickenOrdered ? "outline" : "default"} 
+                className={`w-full mt-4 transition-all ${isChickenOrdered ? "bg-green-50 text-green-600 border-green-200" : "bg-primary hover:scale-105"}`}
+                disabled={isChickenOrdered}
+                onClick={() => {
+                  setStockItems(prev => prev.map(item => 
+                    item.name.includes("Chicken Thigh") 
+                      ? { ...item, currentStock: item.currentStock + 30, riskLevel: 'low' } 
+                      : item
+                  ));
+                  setIsChickenOrdered(true);
+                }}
+              >
+                {isChickenOrdered ? "✅ Order Placed" : "Approve Order"}
+              </Button>
+            </div>
 
-      {/* Cooking Oil Action Card */}
-      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all">
-        <div className="flex justify-between items-start mb-2">
-           <Badge className="bg-warning/10 text-warning border-warning/20">Hari Raya Prep</Badge>
-           <TrendingUp className="h-4 w-4 text-warning" />
-        </div>
-        <p className="font-bold text-foreground">Order 20L Cooking Oil</p>
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          Z.AI predicted a <span className="text-warning font-bold">+50% surge</span> due to Hari Raya. Lead time is 3 days—order now to avoid peak prices.
-        </p>
-        <Button variant="outline" className="w-full mt-4 border-primary text-primary hover:bg-primary/10">
-          Review Vendor
-        </Button>
-      </div>
+            {/* Cooking Oil Action Card */}
+            <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all">
+              <div className="flex justify-between items-start mb-2">
+                 <Badge className="bg-warning/10 text-warning border-warning/20">Hari Raya Prep</Badge>
+                 <TrendingUp className="h-4 w-4 text-warning" />
+              </div>
+              <p className="font-bold text-foreground">Order 20L Cooking Oil</p>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                Z.AI predicted a <span className="text-warning font-bold">+50% surge</span> due to Hari Raya. Lead time is 3 days—order now.
+              </p>
+              <Button 
+                variant="outline" 
+                className={`w-full mt-4 ${isOilOrdered ? "bg-green-50 text-green-600 border-green-200" : "border-primary text-primary hover:bg-primary/10"}`}
+                disabled={isOilOrdered}
+                onClick={() => {
+                const message = encodeURIComponent("Hello Sri Gombak Wholesale, I would like to order 20L of Cooking Oil as suggested by my Z.AI dashboard. Please confirm delivery.");
+                window.open(`https://wa.me/60123456789?text=${message}`, '_blank');
+                
+                // Still update the UI
+                setIsOilOrdered(true);
+                setStockItems(prev => prev.map(item => 
+                  item.name.includes("Cooking Oil") ? { ...item, currentStock: item.currentStock + 20 } : item
+                ));
+              }}
+              >
+                {isOilOrdered ? "✅ Order Placed" : "Review Vendor"}
+              </Button>
+            </div>
 
-      {/* Sambal Action Card */}
-      <div className="p-4 rounded-lg bg-card border hover:border-primary transition-all">
-        <div className="flex justify-between items-start mb-2">
-           <Badge className="bg-success/10 text-success border-success/20">Freshness Opt.</Badge>
-           <TrendingDown className="h-4 w-4 text-success" />
-        </div>
-        <p className="font-bold text-foreground">Order 5kg Sambal Paste</p>
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          Weekend usage spike detected. Ordering on <span className="font-bold">Thursday</span> reduces waste by 12%.
-        </p>
-        <Button variant="secondary" className="w-full mt-4">Snooze</Button>
-      </div>
+            {/* Sambal Action Card */}
+            <div className={`p-4 rounded-lg bg-card border transition-all ${isSambalSnoozed ? "opacity-60 bg-muted/30" : "hover:border-primary"}`}>
+              <div className="flex justify-between items-start mb-2">
+                <Badge className={isSambalSnoozed ? "bg-muted text-muted-foreground" : "bg-success/10 text-success border-success/20"}>
+                  {isSambalSnoozed ? "Snoozed" : "Freshness Opt."}
+                </Badge>
+                {!isSambalSnoozed && <TrendingDown className="h-4 w-4 text-success" />}
+              </div>
+
+              <p className="font-bold text-foreground">Order 5kg Sambal Paste</p>
+
+              {isSambalSnoozed ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs text-muted-foreground italic">
+                    Alert paused. Z.AI will remind you again on Thursday.
+                  </p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full text-xs hover:bg-primary/10" 
+                    onClick={() => setIsSambalSnoozed(false)}
+                  >
+                    Undo Snooze
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                    Weekend usage spike detected. Ordering on <span className="font-bold">Thursday</span> reduces waste by 12%.
+                  </p>
+                  <Button 
+                    variant="secondary" 
+                    className="w-full mt-4"
+                    onClick={() => setIsSambalSnoozed(true)}
+                  >
+                    Snooze
+                  </Button>
+                </>
+              )}
+            </div> {/* End Sambal Card */}
+          </div> {/* End Grid */}
+        </CardContent>
+      </Card>
     </div>
-  </CardContent>
-</Card>
-    </div>
-  )
+  );
 }
-  
