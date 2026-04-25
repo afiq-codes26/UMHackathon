@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Send, X, Loader2, Bot, User, AlertCircle } from 'lucide-react'
+import { Sparkles, Send, X, Loader2, Bot, User, AlertCircle, RotateCcw } from 'lucide-react'
 
 interface Message {
+  id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
@@ -17,6 +18,11 @@ interface GLMChatProps {
   suggestedPrompts?: string[]
 }
 
+let idCounter = 0
+function uid() {
+  return `msg-${Date.now()}-${++idCounter}`
+}
+
 export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLMChatProps) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -24,54 +30,99 @@ export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLM
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // ── Auto-scroll ────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loading])
 
+  // ── Auto-resize textarea ───────────────────────────────────
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current
+    if (el) {
+      el.style.height = 'auto'
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+    }
+  }, [])
+
+  useEffect(() => {
+    adjustHeight()
+  }, [input, adjustHeight])
+
+  // ── Clear conversation ─────────────────────────────────────
+  const clearChat = () => {
+    setMessages([])
+    setError(null)
+  }
+
+  // ── Send message ───────────────────────────────────────────
   const send = async (text?: string) => {
     const msg = (text ?? input).trim()
     if (!msg || loading) return
+
     setInput('')
     setError(null)
 
-    const userMsg: Message = { role: 'user', content: msg, timestamp: new Date() }
+    // Reset textarea height after clearing input
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
+
+    const userMsg: Message = { id: uid(), role: 'user', content: msg, timestamp: new Date() }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
+
+    // Build conversation history so the AI remembers previous turns
+    const history = messages.map(m => ({ role: m.role, content: m.content }))
 
     try {
       const res = await fetch('/api/glm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature, message: msg, context }),
+        body: JSON.stringify({ feature, message: msg, context, history }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI error')
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, timestamp: new Date() }])
+
+      setMessages(prev => [
+        ...prev,
+        { id: uid(), role: 'assistant', content: data.reply, timestamp: new Date() },
+      ])
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : 'Failed to reach AI'
       setError(errMsg)
-      setMessages(prev => prev.slice(0, -1)) // remove user msg on failure
+      // Keep the user message — don't delete it on failure
     } finally {
       setLoading(false)
     }
   }
 
+  // ── Keyboard handler ───────────────────────────────────────
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
   return (
     <>
-      {/* Floating button */}
-      <Button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 shadow-lg gap-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-4 py-3"
-        size="sm"
-      >
-        <Sparkles className="h-4 w-4" />
-        Ask MindaAI (GLM)
-      </Button>
+      {/* Floating button — hidden when chat is open */}
+      {!open && (
+        <Button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-6 right-6 z-50 shadow-lg gap-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-4 py-3"
+          size="sm"
+        >
+          <Sparkles className="h-4 w-4" />
+          Ask MindaAI (GLM)
+        </Button>
+      )}
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-card border rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
+        <div className="fixed bottom-6 right-6 z-50 w-80 sm:w-96 bg-card border rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b bg-primary/5 rounded-t-2xl">
             <div className="flex items-center gap-2">
@@ -80,12 +131,30 @@ export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLM
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">MindaAI</p>
-                <p className="text-xs text-muted-foreground">Powered by GLM-4</p>
+                <p className="text-xs text-muted-foreground">Powered by GLM</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="h-7 w-7">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearChat}
+                  className="h-7 w-7"
+                  title="Clear chat"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setOpen(false)}
+                className="h-7 w-7"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -93,13 +162,16 @@ export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLM
             {messages.length === 0 && (
               <div className="text-center py-4">
                 <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Ask me anything about your {feature} data</p>
-                {suggestedPrompts && (
+                <p className="text-sm text-muted-foreground">
+                  Ask me anything about your {feature} data
+                </p>
+                {suggestedPrompts && suggestedPrompts.length > 0 && (
                   <div className="mt-3 space-y-1.5">
                     {suggestedPrompts.map((p, i) => (
                       <button
                         key={i}
                         onClick={() => send(p)}
+                        disabled={loading}
                         className="block w-full text-left text-xs bg-muted/60 hover:bg-muted px-3 py-2 rounded-lg text-foreground transition-colors"
                       >
                         {p}
@@ -110,8 +182,11 @@ export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLM
               </div>
             )}
 
-            {messages.map((m, i) => (
-              <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {messages.map(m => (
+              <div
+                key={m.id}
+                className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
                 {m.role === 'assistant' && (
                   <div className="h-6 w-6 rounded-full bg-primary flex-shrink-0 flex items-center justify-center mt-1">
                     <Bot className="h-3.5 w-3.5 text-primary-foreground" />
@@ -157,14 +232,16 @@ export function GLMChat({ feature, context, placeholder, suggestedPrompts }: GLM
 
           {/* Input */}
           <div className="p-3 border-t">
-            <div className="flex gap-2">
-              <input
-                className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+            <div className="flex gap-2 items-end">
+              <textarea
+                ref={textareaRef}
+                className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground resize-none"
                 placeholder={placeholder ?? 'Ask about your business...'}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+                onKeyDown={handleKeyDown}
                 disabled={loading}
+                rows={1}
               />
               <Button
                 size="icon"

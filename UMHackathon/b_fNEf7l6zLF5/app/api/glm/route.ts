@@ -87,8 +87,7 @@ function buildSystemPrompt(featureDesc: string, store: NonNullable<ReturnType<ty
 }
 
 export async function POST(req: NextRequest) {
-  // ── 1. Parse body safely ──────────────────────────────────────
-  let body: { feature?: string; message?: string; context?: unknown }
+  let body: { feature?: string; message?: string; context?: unknown; history?: { role: string; content: string }[] }
   try {
     body = await req.json()
   } catch {
@@ -98,9 +97,8 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { feature: rawFeature, message, context } = body
+  const { feature: rawFeature, message, context, history } = body
 
-  // ── 2. Validate required fields ───────────────────────────────
   if (!message || typeof message !== 'string') {
     return NextResponse.json(
       { error: 'message is required and must be a string' },
@@ -116,12 +114,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 3. Validate feature ───────────────────────────────────────
   const feature: Feature = VALID_FEATURES.includes(rawFeature as Feature)
     ? (rawFeature as Feature)
     : 'general'
 
-  // ── 4. Get store data safely ──────────────────────────────────
   const store = getStore()
   if (!store) {
     return NextResponse.json(
@@ -130,10 +126,8 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 5. Build messages ─────────────────────────────────────────
   const featureDesc = FEATURE_DESCRIPTIONS[feature]
 
-  // Context goes into the system prompt, not a fake user/assistant pair
   const contextLine =
     context != null
       ? `\n\nAdditional user-provided context:\n${JSON.stringify(context)}`
@@ -144,10 +138,23 @@ export async function POST(req: NextRequest) {
       role: 'system',
       content: buildSystemPrompt(featureDesc, store) + contextLine,
     },
-    { role: 'user', content: message },
   ]
 
-  // ── 6. Call the model ─────────────────────────────────────────
+  // ── Append conversation history ────────────────────────────
+  if (Array.isArray(history) && history.length > 0) {
+    for (const h of history) {
+      if (h.role === 'user' || h.role === 'assistant') {
+        messages.push({
+          role: h.role,
+          content: h.content,
+        })
+      }
+    }
+  }
+
+  // ── Append the current user message ───────────────────────
+  messages.push({ role: 'user', content: message })
+
   try {
     const reply = await callGLM(messages)
     return NextResponse.json({ reply, model: MODEL })
