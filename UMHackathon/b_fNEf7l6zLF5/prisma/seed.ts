@@ -2,10 +2,18 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+// Helpers
+const random = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min
+
+const sample = <T>(arr: T[]) => arr[random(0, arr.length - 1)]
+
 async function main() {
   console.log('🌱 Seeding database...')
 
-  // 1. Create a demo user
+  //////////////////////////////////////////////////////
+  // 1. USER (ONLY ONE)
+  //////////////////////////////////////////////////////
   const user = await prisma.user.upsert({
     where: { email: 'demo@example.com' },
     update: {},
@@ -16,152 +24,170 @@ async function main() {
     },
   })
 
-  console.log('✅ Created user:', user.email)
+  console.log('✅ User ready')
 
-  // 2. VENDORS
-  const moreVendorsData = [
-    { name: 'Seafood Supplier', category: 'food' },
-    { name: 'Beverage Distributor', category: 'food' },
-    { name: 'Packaging Solutions', category: 'supplies' },
-    { name: 'Cleaning Services MY', category: 'services' },
-    { name: 'Frozen Goods Supplier', category: 'food' },
-    { name: 'Bakery Ingredients Co', category: 'food' },
-    { name: 'Gas & Utilities MY', category: 'services' },
+  //////////////////////////////////////////////////////
+  // 2. VENDORS (10)
+  //////////////////////////////////////////////////////
+  const vendorNames = [
+    'Fresh Farm Supplies',
+    'NSK Trading',
+    'Pasar Borong Selayang',
+    'Seafood Express',
+    'Cameron Highlands Farm',
+    'Beverage Distributor',
+    'Packaging Solutions',
+    'Frozen Goods Supplier',
+    'Bakery Ingredients Co',
+    'Gas & Utilities MY',
   ]
 
-  const allVendors = await Promise.all(
-    moreVendorsData.map((v, i) =>
+  const vendors = await Promise.all(
+    vendorNames.map((name, i) =>
       prisma.vendor.create({
         data: {
-          name: v.name,
-          email: `vendor${i + 4}@example.com`,
+          name,
+          email: `vendor${i}@example.com`,
           phone: `+60123${100000 + i}`,
-          category: v.category,
+          category: sample(['food', 'supplies', 'services']),
+          status: 'active',
           userId: user.id,
         },
       })
     )
   )
 
-  console.log(`✅ Total vendors: ${allVendors.length}`)
+  console.log('✅ 10 Vendors created')
 
-  // 3. TRANSACTIONS
-  const moreTransactionsData = [
-    { amount: 300, type: 'expense', category: 'utilities', desc: 'Electricity bill' },
-    { amount: 220, type: 'expense', category: 'food', desc: 'Vegetables restock' },
-    { amount: 1800, type: 'income', category: 'sales', desc: 'Weekend sales' },
-    { amount: 95, type: 'expense', category: 'supplies', desc: 'Cleaning supplies' },
-    { amount: 670, type: 'expense', category: 'food', desc: 'Seafood purchase' },
-    { amount: 2500, type: 'income', category: 'sales', desc: 'Event catering' },
-    { amount: 400, type: 'expense', category: 'services', desc: 'Maintenance' },
+  //////////////////////////////////////////////////////
+  // 3. STOCK (10) — LINKED TO VENDORS
+  //////////////////////////////////////////////////////
+  const stockNames = [
+    'Chicken',
+    'Rice',
+    'Cooking Oil',
+    'Eggs',
+    'Milk',
+    'Sugar',
+    'Salt',
+    'Flour',
+    'Vegetables',
+    'Fish',
   ]
 
-  await Promise.all(
-    moreTransactionsData.map((t, i) =>
-      prisma.transaction.create({
-        data: {
-          amount: t.amount,
-          type: t.type,
-          category: t.category,
-          description: t.desc,
-          vendorId: t.type === 'expense' ? allVendors[i % allVendors.length].id : null,
-          userId: user.id,
-          date: new Date(`2026-04-${10 + i}`),
-        },
-      })
-    )
-  )
-
-  console.log(`✅ Transactions created`)
-
-  // 4. STOCK
-  const moreStockData = [
-    { name: 'Sugar', qty: 30, unit: 'kg' },
-    { name: 'Salt', qty: 20, unit: 'kg' },
-    { name: 'Flour', qty: 40, unit: 'kg' },
-    { name: 'Eggs', qty: 200, unit: 'pieces' },
-    { name: 'Milk', qty: 25, unit: 'liters' },
-    { name: 'Plastic Containers', qty: 100, unit: 'pieces' },
-  ]
-
-  await Promise.all(
-    moreStockData.map((s) =>
+  const stocks = await Promise.all(
+    stockNames.map((name, i) =>
       prisma.stock.create({
         data: {
-          name: s.name,
-          quantity: s.qty,
-          unit: s.unit,
+          name,
+          quantity: random(5, 200),
+          unit: sample(['kg', 'liters', 'pieces']),
           category: 'ingredients',
-          reorderLevel: 15,
+          reorderLevel: random(10, 30),
           lastRestocked: new Date(),
+          vendorId: vendors[i % vendors.length].id, // 🔥 KEY RELATION
         },
       })
     )
   )
 
-  console.log('✅ Stock entries expanded')
+  console.log('✅ 10 Stock items created')
 
-  // 5. WASTE
-  const moreWasteData = [
-    { item: 'Milk', qty: 2, reason: 'expired', cost: 10 },
-    { item: 'Chicken', qty: 1, reason: 'spoiled', cost: 18 },
-    { item: 'Rice', qty: 3, reason: 'damaged', cost: 9 },
-    { item: 'Eggs', qty: 12, reason: 'broken', cost: 6 },
-    { item: 'Bread', qty: 5, reason: 'expired', cost: 7 },
-    { item: 'Fish', qty: 2, reason: 'spoiled', cost: 20 },
-    { item: 'Sauce', qty: 1, reason: 'expired', cost: 5 },
-    { item: 'Vegetables', qty: 2, reason: 'spoiled', cost: 8 },
-  ]
-
+  //////////////////////////////////////////////////////
+  // 4. TRANSACTIONS (10)
+  //////////////////////////////////////////////////////
   await Promise.all(
-    moreWasteData.map((w, i) =>
+    Array.from({ length: 10 }).map((_, i) => {
+      const isExpense = Math.random() > 0.5
+
+      return prisma.transaction.create({
+        data: {
+          amount: random(50, 3000),
+          type: isExpense ? 'expense' : 'income',
+          category: sample(['food', 'utilities', 'sales', 'supplies']),
+          description: `Transaction ${i + 1}`,
+          vendorId: isExpense
+            ? vendors[i % vendors.length].id
+            : null,
+          userId: user.id,
+          date: new Date(`2026-04-${10 + i}`),
+          status: sample(['pending', 'completed']),
+        },
+      })
+    })
+  )
+
+  console.log('✅ 10 Transactions created')
+
+  //////////////////////////////////////////////////////
+  // 5. WASTE (10)
+  //////////////////////////////////////////////////////
+  await Promise.all(
+    Array.from({ length: 10 }).map((_, i) =>
       prisma.waste.create({
         data: {
-          item: w.item,
-          quantity: w.qty,
+          item: sample(stockNames),
+          quantity: random(1, 10),
           unit: 'kg',
-          reason: w.reason,
-          cost: w.cost,
+          reason: sample([
+            'expired',
+            'spoiled',
+            'damaged',
+            'overproduction',
+          ]),
+          cost: random(5, 50),
           date: new Date(`2026-04-${15 + i}`),
         },
       })
     )
   )
 
-  console.log('✅ Waste entries expanded')
+  console.log('✅ 10 Waste records created')
 
-  // 6. RUSH ORDERS
-  const moreOrdersData = [
-    { name: 'Ali', total: 20, status: 'completed', priority: 'normal' },
-    { name: 'Siti', total: 35, status: 'pending', priority: 'urgent' },
-    { name: 'Ahmad', total: 18, status: 'completed', priority: 'normal' },
-    { name: 'Mei Ling', total: 50, status: 'preparing', priority: 'high' },
-    { name: 'Raj', total: 22, status: 'completed', priority: 'normal' },
-    { name: 'Kumar', total: 40, status: 'pending', priority: 'high' },
-    { name: 'Aisyah', total: 27, status: 'preparing', priority: 'urgent' },
-    { name: 'Daniel', total: 60, status: 'completed', priority: 'normal' },
+  //////////////////////////////////////////////////////
+  // 6. RUSH ORDERS (10)
+  //////////////////////////////////////////////////////
+  const names = [
+    'Ali',
+    'Siti',
+    'Ahmad',
+    'Mei Ling',
+    'Raj',
+    'Kumar',
+    'Aisyah',
+    'Daniel',
+    'Farah',
+    'Jason',
   ]
 
   await Promise.all(
-    moreOrdersData.map((o, i) =>
+    names.map((name, i) =>
       prisma.rushOrder.create({
         data: {
-          customerName: o.name,
-          items: JSON.stringify([{ name: 'Mixed Order', quantity: 2 }]),
-          totalAmount: o.total,
-          status: o.status,
-          priority: o.priority,
+          customerName: name,
+          items: JSON.stringify([
+            {
+              name: sample(stockNames),
+              quantity: random(1, 5),
+            },
+          ]),
+          totalAmount: random(10, 100),
+          status: sample(['pending', 'preparing', 'completed']),
+          priority: sample(['normal', 'high', 'urgent']),
+          notes: 'Auto-generated order',
           orderDate: new Date(`2026-04-${20 + i}T12:00:00`),
         },
       })
     )
   )
 
-  console.log('✅ Rush orders expanded')
+  console.log('✅ 10 Rush Orders created')
+
+  //////////////////////////////////////////////////////
   console.log('🎉 Seeding completed successfully!')
 }
 
-// CRITICAL: Call the function and handle cleanup
+// RUN
 main()
   .then(async () => {
     await prisma.$disconnect()
