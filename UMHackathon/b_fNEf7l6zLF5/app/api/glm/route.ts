@@ -1,100 +1,155 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStore } from '@/lib/store'
+import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
 
-// Uses Ilmu AI (OpenAI-compatible) with GLM-5.1
 const BASE_URL = process.env.ILMU_BASE_URL ?? 'https://api.ilmu.ai/v1'
 const MODEL = process.env.ILMU_MODEL ?? 'ilmu-glm-5.1'
 
-async function callGLM(messages: { role: string; content: string }[], apiKey: string) {
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.7,
-      max_tokens: 1024,
-    }),
-  })
+const client = new OpenAI({
+  baseURL: BASE_URL,
+  apiKey: process.env.ILMU_API_KEY ?? '',
+})
 
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Ilmu AI error ${res.status}: ${err}`)
-  }
+const VALID_FEATURES = [
+  'dashboard', 'stock', 'rush', 'vendors',
+  'transactions', 'pricing', 'waste', 'general',
+] as const
 
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content as string
+type Feature = (typeof VALID_FEATURES)[number]
+
+const FEATURE_DESCRIPTIONS: Record<Feature, string> = {
+  dashboard: 'Business overview and daily performance analysis',
+  stock: 'Inventory management and reorder recommendations',
+  rush: 'Rush hour prediction and demand forecasting',
+  vendors: 'Vendor relationship and ordering optimization',
+  transactions: 'Transaction analysis and revenue insights',
+  pricing: 'Menu pricing optimization and margin analysis',
+  waste: 'Waste reduction and spoilage prevention',
+  general: 'General business assistance',
 }
 
-function buildSystemPrompt(feature: string, store: ReturnType<typeof getStore>): string {
+async function callGLM(messages: OpenAI.ChatCompletionMessageParam[]) {
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    messages,
+    temperature: 0.7,
+    max_tokens: 1024,
+  })
+
+  return response.choices[0].message.content as string
+}
+
+function buildSystemPrompt(featureDesc: string, store: NonNullable<ReturnType<typeof getStore>>): string {
   const stockSummary = store.stockItems
     .map(i => `${i.name}: ${i.currentStock}${i.unit} (risk: ${i.riskLevel})`)
     .join(', ')
-  const salesSummary = `Today: RM${store.metrics.todaySales.toFixed(2)}, ${store.metrics.totalTransactions} transactions, avg RM${store.metrics.averageOrderValue.toFixed(2)}`
+
+  const salesSummary =
+    `Today: RM${store.metrics.todaySales.toFixed(2)}, ` +
+    `${store.metrics.totalTransactions} transactions, ` +
+    `avg RM${store.metrics.averageOrderValue.toFixed(2)}`
+
   const topItems = store.transactions
     .slice(0, 10)
     .flatMap(t => t.items.map(i => i.name))
-    .reduce((acc: Record<string, number>, name) => { acc[name] = (acc[name] || 0) + 1; return acc }, {})
-  const topItemsList = Object.entries(topItems).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n).join(', ')
+    .reduce<Record<string, number>>((acc, name) => {
+      acc[name] = (acc[name] || 0) + 1
+      return acc
+    }, {})
 
-  return `You are MindaAI, an intelligent assistant for MindaFinancial — a smart F&B SME management system for Malaysian hawkers and small restaurants.
+  const topItemsList = Object.entries(topItems)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([n]) => n)
+    .join(', ')
 
-Current business context:
-- Stock: ${stockSummary}
-- Sales: ${salesSummary}
-- Top selling items today: ${topItemsList}
-- Waste this week: RM${store.metrics.wasteThisWeek.toFixed(2)}
-- Active vendors: ${store.metrics.activeVendors}
+  const topItemsDisplay = topItemsList || 'No data yet'
 
-Feature context: ${feature}
-
-Respond helpfully and concisely. Use RM for currency. Focus on practical advice for Malaysian F&B SMEs. Keep responses under 300 words unless more detail is requested.`
+  return [
+    'You are MindaAI, an intelligent assistant for MindaFinancial —',
+    'a smart F&B SME management system for Malaysian hawkers and small restaurants.',
+    '',
+    'Current business context:',
+    `- Stock: ${stockSummary}`,
+    `- Sales: ${salesSummary}`,
+    `- Top selling items today: ${topItemsDisplay}`,
+    `- Waste this week: RM${store.metrics.wasteThisWeek.toFixed(2)}`,
+    `- Active vendors: ${store.metrics.activeVendors}`,
+    '',
+    `Feature context: ${featureDesc}`,
+    '',
+    'Respond helpfully and concisely. Use RM for currency.',
+    'Focus on practical advice for Malaysian F&B SMEs.',
+    'Keep responses under 300 words unless more detail is requested.',
+  ].join('\n')
 }
 
 export async function POST(req: NextRequest) {
-  const { feature, message, context } = await req.json()
+  // ── 1. Parse body safely ──────────────────────────────────────
+  let body: { feature?: string; message?: string; context?: unknown }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON in request body' },
+      { status: 400 },
+    )
+  }
+
+  const { feature: rawFeature, message, context } = body
+
+  // ── 2. Validate required fields ───────────────────────────────
+  if (!message || typeof message !== 'string') {
+    return NextResponse.json(
+      { error: 'message is required and must be a string' },
+      { status: 400 },
+    )
+  }
 
   const apiKey = process.env.ILMU_API_KEY
   if (!apiKey) {
     return NextResponse.json(
       { error: 'ILMU_API_KEY not set in .env.local' },
-      { status: 503 }
+      { status: 503 },
     )
   }
-  if (!message) {
-    return NextResponse.json({ error: 'message is required' }, { status: 400 })
-  }
 
+  // ── 3. Validate feature ───────────────────────────────────────
+  const feature: Feature = VALID_FEATURES.includes(rawFeature as Feature)
+    ? (rawFeature as Feature)
+    : 'general'
+
+  // ── 4. Get store data safely ──────────────────────────────────
   const store = getStore()
-  const featureDescriptions: Record<string, string> = {
-    dashboard: 'Business overview and daily performance analysis',
-    stock: 'Inventory management and reorder recommendations',
-    rush: 'Rush hour prediction and demand forecasting',
-    vendors: 'Vendor relationship and ordering optimization',
-    transactions: 'Transaction analysis and revenue insights',
-    pricing: 'Menu pricing optimization and margin analysis',
-    waste: 'Waste reduction and spoilage prevention',
-    general: 'General business assistance',
+  if (!store) {
+    return NextResponse.json(
+      { error: 'Store data unavailable' },
+      { status: 503 },
+    )
   }
 
-  const messages: { role: string; content: string }[] = [
-    { role: 'system', content: buildSystemPrompt(featureDescriptions[feature] ?? featureDescriptions.general, store) },
+  // ── 5. Build messages ─────────────────────────────────────────
+  const featureDesc = FEATURE_DESCRIPTIONS[feature]
+
+  // Context goes into the system prompt, not a fake user/assistant pair
+  const contextLine =
+    context != null
+      ? `\n\nAdditional user-provided context:\n${JSON.stringify(context)}`
+      : ''
+
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: buildSystemPrompt(featureDesc, store) + contextLine,
+    },
+    { role: 'user', content: message },
   ]
 
-  if (context) {
-    messages.push({ role: 'user', content: `Additional context: ${JSON.stringify(context)}` })
-    messages.push({ role: 'assistant', content: 'Understood. I have reviewed the context.' })
-  }
-
-  messages.push({ role: 'user', content: message })
-
+  // ── 6. Call the model ─────────────────────────────────────────
   try {
-    const reply = await callGLM(messages, apiKey)
+    const reply = await callGLM(messages)
     return NextResponse.json({ reply, model: MODEL })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
